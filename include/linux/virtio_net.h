@@ -47,7 +47,7 @@ static inline int virtio_net_hdr_to_skb(struct sk_buff *skb,
 			thlen = sizeof(struct tcphdr);
 			break;
 		case VIRTIO_NET_HDR_GSO_UDP:
-			gso_type = SKB_GSO_UDP;
+			gso_type = SKB_GSO_UDP_L4;
 			ip_proto = IPPROTO_UDP;
 			thlen = sizeof(struct udphdr);
 			break;
@@ -91,7 +91,7 @@ retry:
 							      NULL, 0, 0, 0,
 							      0)) {
 				/* UFO does not specify ipv4 or 6: try both */
-				if (gso_type & SKB_GSO_UDP &&
+				if (gso_type & SKB_GSO_UDP_L4 &&
 				    skb->protocol == htons(ETH_P_IP)) {
 					skb->protocol = htons(ETH_P_IPV6);
 					goto retry;
