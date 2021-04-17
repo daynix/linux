@@ -3850,6 +3850,7 @@ struct sk_buff *skb_segment(struct sk_buff *head_skb,
 	struct sk_buff *list_skb = skb_shinfo(head_skb)->frag_list;
 	skb_frag_t *frag = skb_shinfo(head_skb)->frags;
 	unsigned int mss = skb_shinfo(head_skb)->gso_size;
+	bool is_ufo = (skb_shinfo(head_skb)->gso_type & SKB_GSO_UDP_L4) != 0;
 	unsigned int doffset = head_skb->data - skb_mac_header(head_skb);
 	struct sk_buff *frag_skb = head_skb;
 	unsigned int offset = doffset;
@@ -3858,11 +3859,14 @@ struct sk_buff *skb_segment(struct sk_buff *head_skb,
 	unsigned int headroom;
 	unsigned int len = head_skb->len;
 	__be16 proto;
-	bool csum, sg;
+	bool csum, sg, print;
 	int nfrags = skb_shinfo(head_skb)->nr_frags;
 	int err = -ENOMEM;
 	int i = 0;
 	int pos;
+
+	print = is_ufo && mss && ((len + offset) / mss) == 2;
+	if (print) pr_err("len %u, mss %u, offset %u, tnl_hlen %u\n", len, mss, offset, tnl_hlen);
 
 	if (list_skb && !list_skb->head_frag && skb_headlen(list_skb) &&
 	    (skb_shinfo(head_skb)->gso_type & SKB_GSO_DODGY)) {
@@ -3934,6 +3938,7 @@ struct sk_buff *skb_segment(struct sk_buff *head_skb,
 	}
 
 normal:
+	if (print) pr_err("normal path mss %u, partial %u\n", mss, partial_segs);
 	headroom = skb_headroom(head_skb);
 	pos = skb_headlen(head_skb);
 
@@ -3991,6 +3996,7 @@ normal:
 				kfree_skb(nskb);
 				goto err;
 			}
+			if (print) pr_err("cloned fragment hsize %u, pos %u\n", hsize, pos);
 
 			nskb->truesize += skb_end_offset(nskb) - hsize;
 			skb_release_head_state(nskb);
@@ -4008,6 +4014,8 @@ normal:
 			if (unlikely(!nskb))
 				goto err;
 
+			if (print) pr_err("allocated fragment hsize %u, doffset %u\n", hsize, doffset);
+
 			skb_reserve(nskb, headroom);
 			__skb_put(nskb, doffset);
 		}
@@ -4023,6 +4031,7 @@ normal:
 		skb_headers_offset_update(nskb, skb_headroom(nskb) - headroom);
 		skb_reset_mac_len(nskb);
 
+		if (print) pr_err("copy from-to %d, size %u\n", -tnl_hlen, doffset + tnl_hlen);
 		skb_copy_from_linear_data_offset(head_skb, -tnl_hlen,
 						 nskb->data - tnl_hlen,
 						 doffset + tnl_hlen);
@@ -4051,6 +4060,7 @@ normal:
 
 		nskb_frag = skb_shinfo(nskb)->frags;
 
+		if (print) pr_err("copy data from %u, size %u\n", offset, hsize);
 		skb_copy_from_linear_data_offset(head_skb, offset,
 						 skb_put(nskb, hsize), hsize);
 
