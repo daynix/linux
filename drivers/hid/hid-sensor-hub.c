@@ -14,8 +14,6 @@
 #include <linux/hid-sensor-hub.h>
 #include "hid-ids.h"
 
-#define HID_SENSOR_HUB_ENUM_QUIRK	0x01
-
 /**
  * struct sensor_hub_data - Hold a instance data for a HID hub device
  * @mutex:		Mutex to serialize synchronous request.
