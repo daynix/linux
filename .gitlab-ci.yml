@@ -16,7 +16,7 @@ include:
 
 workflow:
   rules:
-    # ARK release pipelines
+    # Rawhide release pipelines
     - if: '$CI_PIPELINE_SOURCE == "schedule"'
     # HEAD pipelines
     - if: $CI_PIPELINE_SOURCE =~ /push|web/ &&
@@ -67,12 +67,12 @@ workflow:
   variables:
     srpm_make_target: dist-srpm
 
-.trigger_ark:
+.trigger_rawhide:
   extends: .pipeline
   trigger:
-    branch: kernel-ark
+    branch: rawhide-ark
   variables:
-    name: kernel-ark
+    name: rawhide-ark
     builder_image: quay.io/cki/builder-rawhide
     kpet_tree_family: rawhide
     kpet_tree_name: rawhide
@@ -80,9 +80,9 @@ workflow:
 .trigger_eln:
   extends: .pipeline
   trigger:
-    branch: eln
+    branch: eln-ark
   variables:
-    name: ark-eln
+    name: eln-ark
     builder_image: quay.io/cki/builder-eln
     native_tools: 'true'
     kpet_tree_family: eln
@@ -121,12 +121,12 @@ workflow:
     - *on-success
 
 .variants:
-  ark-up: &ark-up
+  rawhide-up: &rawhide-up
     rpmbuild_with: up
     package_name: kernel
     architectures: x86_64 aarch64 s390x ppc64le
     run_redhat_self_test: 'true'
-  ark-up-debug: &ark-up-debug
+  rawhide-up-debug: &rawhide-up-debug
     rpmbuild_with: up dbgonly
     package_name: kernel-debug
     architectures: x86_64 aarch64
@@ -156,23 +156,23 @@ workflow:
     package_name: kernel-64k-debug
     architectures: aarch64
 
-# ARK CI
+# Rawhide CI
 ark_merge_request:
-  extends: [.merge_request, .trigger_ark, .no_tests, .srpm_for_bot]
-  variables: *ark-up
+  extends: [.merge_request, .trigger_rawhide, .no_tests, .srpm_for_bot]
+  variables: *rawhide-up
 
 ark_debug_merge_request:
-  extends: [.merge_request, .trigger_ark, .no_tests, .manual_for_bot]
-  variables: *ark-up-debug
+  extends: [.merge_request, .trigger_rawhide, .no_tests, .manual_for_bot]
+  variables: *rawhide-up-debug
 
-# ARK baselines
+# Rawhide baselines
 ark_baseline:
-  extends: [.baseline, .trigger_ark, .reported_tests, .ark_latest_head]
-  variables: *ark-up
+  extends: [.baseline, .trigger_rawhide, .reported_tests, .ark_latest_head]
+  variables: *rawhide-up
 
 ark_debug_baseline:
-  extends: [.baseline, .trigger_ark, .reported_tests, .ark_latest_head]
-  variables: *ark-up-debug
+  extends: [.baseline, .trigger_rawhide, .reported_tests, .ark_latest_head]
+  variables: *rawhide-up-debug
 
 # ELN CI
 eln_merge_request:
