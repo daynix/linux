@@ -6112,6 +6112,10 @@ struct __sk_buff {
 	__u8  tstamp_type;
 	__u32 :24;		/* Padding, future use. */
 	__u64 hwtstamp;
+
+	__u32 vnet_hash_value;
+	__u16 vnet_hash_report;
+	__u16 vnet_rss_queue;
 };
 
 struct bpf_tunnel_key {

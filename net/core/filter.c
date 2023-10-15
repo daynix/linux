@@ -8435,7 +8435,13 @@ static bool bpf_skb_is_valid_access(int off, int size, enum bpf_access_type type
 	case bpf_ctx_range(struct __sk_buff, data):
 	case bpf_ctx_range(struct __sk_buff, data_meta):
 	case bpf_ctx_range(struct __sk_buff, data_end):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_value):
 		if (size != size_default)
+			return false;
+		break;
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_report):
+	case bpf_ctx_range(struct __sk_buff, vnet_rss_queue):
+		if (size != sizeof(__u16))
 			return false;
 		break;
 	case bpf_ctx_range_ptr(struct __sk_buff, flow_keys):
@@ -8473,7 +8479,7 @@ static bool bpf_skb_is_valid_access(int off, int size, enum bpf_access_type type
 	return true;
 }
 
-static bool sk_filter_is_valid_access(int off, int size,
+static bool vnet_hash_is_valid_access(int off, int size,
 				      enum bpf_access_type type,
 				      const struct bpf_prog *prog,
 				      struct bpf_insn_access_aux *info)
@@ -8493,6 +8499,9 @@ static bool sk_filter_is_valid_access(int off, int size,
 	if (type == BPF_WRITE) {
 		switch (off) {
 		case bpf_ctx_range_till(struct __sk_buff, cb[0], cb[4]):
+		case bpf_ctx_range(struct __sk_buff, vnet_hash_value):
+		case bpf_ctx_range(struct __sk_buff, vnet_hash_report):
+		case bpf_ctx_range(struct __sk_buff, vnet_rss_queue):
 			break;
 		default:
 			return false;
@@ -8500,6 +8509,21 @@ static bool sk_filter_is_valid_access(int off, int size,
 	}
 
 	return bpf_skb_is_valid_access(off, size, type, prog, info);
+}
+
+static bool sk_filter_is_valid_access(int off, int size,
+				      enum bpf_access_type type,
+				      const struct bpf_prog *prog,
+				      struct bpf_insn_access_aux *info)
+{
+	switch (off) {
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_value):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_report):
+	case bpf_ctx_range(struct __sk_buff, vnet_rss_queue):
+		return false;
+	}
+
+	return vnet_hash_is_valid_access(off, size, type, prog, info);
 }
 
 static bool cg_skb_is_valid_access(int off, int size,
@@ -8511,6 +8535,9 @@ static bool cg_skb_is_valid_access(int off, int size,
 	case bpf_ctx_range(struct __sk_buff, tc_classid):
 	case bpf_ctx_range(struct __sk_buff, data_meta):
 	case bpf_ctx_range(struct __sk_buff, wire_len):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_value):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_report):
+	case bpf_ctx_range(struct __sk_buff, vnet_rss_queue):
 		return false;
 	case bpf_ctx_range(struct __sk_buff, data):
 	case bpf_ctx_range(struct __sk_buff, data_end):
@@ -8558,6 +8585,9 @@ static bool lwt_is_valid_access(int off, int size,
 	case bpf_ctx_range(struct __sk_buff, tstamp):
 	case bpf_ctx_range(struct __sk_buff, wire_len):
 	case bpf_ctx_range(struct __sk_buff, hwtstamp):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_value):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_report):
+	case bpf_ctx_range(struct __sk_buff, vnet_rss_queue):
 		return false;
 	}
 
@@ -8799,6 +8829,10 @@ static bool tc_cls_act_is_valid_access(int off, int size,
 	}
 
 	switch (off) {
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_value):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_report):
+	case bpf_ctx_range(struct __sk_buff, vnet_rss_queue):
+		return false;
 	case bpf_ctx_range(struct __sk_buff, data):
 		info->reg_type = PTR_TO_PACKET;
 		break;
@@ -9117,6 +9151,9 @@ static bool sk_skb_is_valid_access(int off, int size,
 	case bpf_ctx_range(struct __sk_buff, tstamp):
 	case bpf_ctx_range(struct __sk_buff, wire_len):
 	case bpf_ctx_range(struct __sk_buff, hwtstamp):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_value):
+	case bpf_ctx_range(struct __sk_buff, vnet_hash_report):
+	case bpf_ctx_range(struct __sk_buff, vnet_rss_queue):
 		return false;
 	}
 
@@ -9726,6 +9763,42 @@ static u32 bpf_convert_ctx_access(enum bpf_access_type type,
 				      bpf_target_off(struct skb_shared_info,
 						     hwtstamps, 8,
 						     target_size));
+		break;
+
+	case offsetof(struct __sk_buff, vnet_hash_value):
+		BUILD_BUG_ON(sizeof_field(struct bpf_skb_vnet_hash_end, hash_value) != 4);
+
+		off = offsetof(struct sk_buff, cb) +
+		      offsetof(struct bpf_skb_vnet_hash_end, hash_value);
+
+		if (type == BPF_WRITE)
+			*insn++ = BPF_EMIT_STORE(BPF_W, si, off);
+		else
+			*insn++ = BPF_LDX_MEM(BPF_W, si->dst_reg, si->src_reg, off);
+		break;
+
+	case offsetof(struct __sk_buff, vnet_hash_report):
+		BUILD_BUG_ON(sizeof_field(struct bpf_skb_vnet_hash_end, hash_report) != 2);
+
+		off = offsetof(struct sk_buff, cb) +
+		      offsetof(struct bpf_skb_vnet_hash_end, hash_report);
+
+		if (type == BPF_WRITE)
+			*insn++ = BPF_EMIT_STORE(BPF_H, si, off);
+		else
+			*insn++ = BPF_LDX_MEM(BPF_H, si->dst_reg, si->src_reg, off);
+		break;
+
+	case offsetof(struct __sk_buff, vnet_rss_queue):
+		BUILD_BUG_ON(sizeof_field(struct bpf_skb_vnet_hash_end, rss_queue) != 2);
+
+		off = offsetof(struct sk_buff, cb) +
+		      offsetof(struct bpf_skb_vnet_hash_end, rss_queue);
+
+		if (type == BPF_WRITE)
+			*insn++ = BPF_EMIT_STORE(BPF_H, si, off);
+		else
+			*insn++ = BPF_LDX_MEM(BPF_H, si->dst_reg, si->src_reg, off);
 		break;
 	}
 
@@ -10969,7 +11042,7 @@ const struct bpf_prog_ops flow_dissector_prog_ops = {
 
 const struct bpf_verifier_ops vnet_hash_verifier_ops = {
 	.get_func_proto		= sk_filter_func_proto,
-	.is_valid_access	= sk_filter_is_valid_access,
+	.is_valid_access	= vnet_hash_is_valid_access,
 	.convert_ctx_access	= bpf_convert_ctx_access,
 	.gen_ld_abs		= bpf_gen_ld_abs,
 };
